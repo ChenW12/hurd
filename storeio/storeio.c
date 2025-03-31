@@ -34,6 +34,8 @@
 #include "open.h"
 #include "dev.h"
 #include "libtrivfs/trivfs_fsys_S.h"
+#include "libmachdev/machdev.h"
+#include "libshouldbeinlibc/wire.h"
 
 static struct argp_option options[] =
 {
@@ -48,6 +50,9 @@ static struct argp_option options[] =
   {"rdev",     'n', "ID", 0,
    "The stat rdev number for this node; may be either a"
    " single integer, or of the form MAJOR,MINOR"},
+  {"next-task", 'N', "TASK", 0, "Next bootstrap task"},
+  {"host-priv-port", 'H', "PORT", 0, "Port for bootstrapping host"},
+  {"device-master-port", 'P', "PORT", 0, "Port for bootstrapping device master"},
   {0}
 };
 static const char doc[] = "Translator for devices and other stores";
@@ -56,6 +61,10 @@ const char *argp_program_version = STANDARD_HURD_VERSION (storeio);
 
 static bool debug=false;
 static char *debug_fname=NULL;
+
+struct store *bootstrap_part_store;
+mach_port_t bootstrap_resume_task = MACH_PORT_NULL;
+static mach_port_t store_control_port;
 
 /* Desired store parameters specified by the user.  */
 struct storeio_argp_params
@@ -79,6 +88,10 @@ parse_opt (int key, char *arg, struct argp_state *state)
     case 'c': params->dev->inhibit_cache = 1; break;
     case 'e': params->dev->enforced = 1; break;
     case 'F': params->dev->no_fileio = 1; break;
+
+    case 'N': params->store_params.next_task = atoi (arg); break;
+    case 'H': params->store_params.host_priv_port = atoi (arg); break;
+    case 'P': params->store_params.dev_master_port = atoi (arg); break;
 
     case 'n':
       {
@@ -119,11 +132,17 @@ parse_opt (int key, char *arg, struct argp_state *state)
       memset (&params->store_params, 0, sizeof params->store_params);
       params->store_params.default_type = "device";
       params->store_params.store_optional = 1;
+      params->store_params.next_task = MACH_PORT_NULL;
+      params->store_params.host_priv_port = MACH_PORT_NULL;
+      params->store_params.dev_master_port = MACH_PORT_NULL;
       state->child_inputs[0] = &params->store_params;
       break;
 
     case ARGP_KEY_SUCCESS:
       params->dev->store_name = params->store_params.result;
+      bootstrap_resume_task = params->store_params.next_task;
+      _hurd_host_priv = params->store_params.host_priv_port;
+      _hurd_device_master = params->store_params.dev_master_port;
       break;
 
     default:
@@ -144,6 +163,9 @@ main (int argc, char *argv[])
   mach_port_t bootstrap;
   struct dev device;
   struct storeio_argp_params params;
+  pthread_t t;
+  device_t disk_device;
+  struct store *bootstrap_disk_store;
 
   memset (&device, 0, sizeof device);
   pthread_mutex_init (&device.lock, NULL);
@@ -151,24 +173,55 @@ main (int argc, char *argv[])
   params.dev = &device;
   argp_parse (&argp, argc, argv, 0, 0, &params);
 
-  if (debug)
+  if (bootstrap_resume_task != MACH_PORT_NULL)
     {
-      if (!debug_fname)
-	error (3, EINVAL, "missing translated node");
-      err = trivfs_startup_debug (debug_fname, 0, 0, 0, 0, &storeio_fsys);
+      /* We are at a bootstrap process.  */
+
+      machdev_register (NULL/* SOMETHING */);
+      task_get_bootstrap_port (mach_task_self (), &bootstrap);
+      device_open (bootstrap, D_READ, "wd0", &disk_device);
+      err = store_device_create (disk_device, STORE_READONLY, &bootstrap_part_store);
+      err = store_part_create (bootstrap_disk_store, 1, 0, &bootstrap_part_store);
+      machdev_trivfs_init (argc, argv, bootstrap_resume_task, "wd0s1", NULL, &bootstrap);
+
+      /* Make sure we will not swap out, in case we drive the partition for
+         swapping */
+      err = wire_task_self ();
       if (err)
-	error (3, err, "trivfs_startup_debug failed");
+        error (1, errno, "cannot lock all memory");
+
+      machdev_device_init ();
+      err = pthread_create (&t, NULL, machdev_server, NULL);
+      if (err)
+        error (1, err, "Creating machdev_server thread");
+      pthread_detach (t);
+
+      machdev_trivfs_server_startup (bootstrap);
+      machdev_trivfs_server_loop (NULL);
+      /* Never reached */
+      return 0;
     }
   else
     {
-      task_get_bootstrap_port (mach_task_self (), &bootstrap);
-      if (bootstrap == MACH_PORT_NULL)
-	error (2, 0, "Must be started as a translator");
+      if (debug)
+        {
+          if (!debug_fname)
+	    error (3, EINVAL, "missing translated node");
+          err = trivfs_startup_debug (debug_fname, 0, 0, 0, 0, &storeio_fsys);
+          if (err)
+	    error (3, err, "trivfs_startup_debug failed");
+        }
+      else
+        {
+          task_get_bootstrap_port (mach_task_self (), &bootstrap);
+          if (bootstrap == MACH_PORT_NULL)
+	    error (2, 0, "Must be started as a translator");
 
-      /* Reply to our parent */
-      err = trivfs_startup (bootstrap, 0, 0, 0, 0, 0, &storeio_fsys);
-      if (err)
-	error (3, err, "trivfs_startup");
+          /* Reply to our parent */
+          err = trivfs_startup (bootstrap, 0, 0, 0, 0, 0, &storeio_fsys);
+          if (err)
+	    error (3, err, "trivfs_startup");
+        }
     }
 
   storeio_fsys->hook = &device;

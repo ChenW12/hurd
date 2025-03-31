@@ -774,6 +774,15 @@ struct store_argp_params
      If zero, the parser fails with the error message "No store specified".
      If nonzero, the parser succeeds and sets `result' to null.  */
   int store_optional;
+
+  /* Next bootstrap task.  */
+  mach_port_t next_task;
+
+  /* Host privileged port.  */
+  mach_port_t host_priv_port;
+
+  /* Device master port.  */
+  mach_port_t dev_master_port;
 };
 
 /* The result of parsing a store, which should be enough information to open
