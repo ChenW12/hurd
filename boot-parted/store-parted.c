@@ -4,7 +4,14 @@
 static void
 store_parted_device_init (void)
 {
-    // TODO
+  mach_port_t bootstrap;
+  error_t err;
+  device_t disk_device;
+
+  task_get_bootstrap_port (mach_task_self (), &bootstrap);
+  device_open (bootstrap, D_READ, "wd0", &disk_device);
+  err = store_device_create (disk_device, STORE_READONLY, &bootstrap_part_store);
+  err = store_part_create (bootstrap_disk_store, 1, 0, &bootstrap_part_store);
 }
 
 static void
