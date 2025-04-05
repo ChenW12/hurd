@@ -1,9 +1,11 @@
 dir		= boot-parted
 makemode	= server
 
-SRCS		= main.c
-OBJS 		= main.o
+SRCS		= main.c store-parted.c
+OBJS 		= main.o store-parted.o # Use some magic to convert the variables in SRCS to object files
 target		= boot-parted
-HURDLIBS	= machdev trivfs
+HURDLIBS	= machdev trivfs ports shouldbeinlibc
+
+LDLIBS += -lpthread
 
 include ../Makeconf
