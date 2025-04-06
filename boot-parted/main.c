@@ -116,7 +116,7 @@ main (int argc, char **argv)
     }
 
   store_parted_register_block ();
-  machdev_trivfs_init (argc, argv, bootstrap_resume_task, "boot-parted", "/dev/boot-parted", &bootstrap);
+  machdev_trivfs_init (argc, argv, bootstrap_resume_task, "wd0s1", NULL, &bootstrap);
 
   /* Make sure we will not swap out, in case we drive the disk used for
      swapping.

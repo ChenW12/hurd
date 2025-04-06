@@ -1,6 +1,9 @@
 #include <hurd/store.h>
 #include "libmachdev/machdev.h"
 
+struct store *bootstrap_part_store;
+struct store *bootstrap_disk_store;
+
 static void
 store_parted_device_init (void)
 {
@@ -9,9 +12,8 @@ store_parted_device_init (void)
   device_t disk_device;
 
   task_get_bootstrap_port (mach_task_self (), &bootstrap);
-  device_open (bootstrap, D_READ, "wd0", &disk_device);
-  err = store_device_create (disk_device, STORE_READONLY, &bootstrap_part_store);
-  err = store_part_create (bootstrap_disk_store, 1, 0, &bootstrap_part_store);
+//  device_open (bootstrap, D_READ, "wd0", &disk_device);
+  err = store_device_open ("wd0", STORE_READONLY, &bootstrap_disk_store);
 }
 
 static void
@@ -30,13 +32,16 @@ store_parted_device_open (mach_port_t reply_port, mach_msg_type_name_t reply_por
 		      dev_mode_t mode, const char *name, device_t * devp,
 		      mach_msg_type_name_t * devicePoly)
 {
-    return 0;
+  error_t err;
+  err = store_part_create (bootstrap_disk_store, 1, 0, &bootstrap_part_store);
+  return err;
 }
 
 static io_return_t
 store_parted_device_close (void *d)
 {
-    return 0;
+  store_close_source (bootstrap_part_store);
+  return 0;
 }
 
 static io_return_t
@@ -45,7 +50,7 @@ store_parted_device_write (void *d, mach_port_t reply_port,
 		       recnum_t bn, io_buf_ptr_t data, unsigned int count,
 		       int *bytes_written)
 {
-    return 0;
+  store_write (bootstrap_part_store, );
 }
 
 static io_return_t
@@ -54,7 +59,7 @@ store_parted_device_read (void *d, mach_port_t reply_port,
 		      recnum_t bn, int count, io_buf_ptr_t * data,
 		      unsigned *bytes_read)
 {
-    return 0;
+  store_read (bootstrap_part_store, );
 }
 
 static io_return_t
