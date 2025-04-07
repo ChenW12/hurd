@@ -3,17 +3,16 @@
 
 struct store *bootstrap_part_store;
 struct store *bootstrap_disk_store;
+mach_port_t bootstrap;
 
 static void
 store_parted_device_init (void)
 {
-  mach_port_t bootstrap;
   error_t err;
   device_t disk_device;
 
   task_get_bootstrap_port (mach_task_self (), &bootstrap);
 //  device_open (bootstrap, D_READ, "wd0", &disk_device);
-  err = store_device_open ("wd0", STORE_READONLY, &bootstrap_disk_store);
 }
 
 static void
@@ -33,6 +32,7 @@ store_parted_device_open (mach_port_t reply_port, mach_msg_type_name_t reply_por
 		      mach_msg_type_name_t * devicePoly)
 {
   error_t err;
+  err = store_device_open ("wd0", STORE_READONLY, &bootstrap_disk_store);
   err = store_part_create (bootstrap_disk_store, 1, 0, &bootstrap_part_store);
   return err;
 }
@@ -41,7 +41,7 @@ static io_return_t
 store_parted_device_close (void *d)
 {
   store_close_source (bootstrap_part_store);
-  return 0;
+  return D_SUCCESS;
 }
 
 static io_return_t
@@ -50,7 +50,8 @@ store_parted_device_write (void *d, mach_port_t reply_port,
 		       recnum_t bn, io_buf_ptr_t data, unsigned int count,
 		       int *bytes_written)
 {
-  store_write (bootstrap_part_store, );
+  //store_write (bootstrap_part_store, );
+  return D_SUCCESS;
 }
 
 static io_return_t
@@ -59,21 +60,22 @@ store_parted_device_read (void *d, mach_port_t reply_port,
 		      recnum_t bn, int count, io_buf_ptr_t * data,
 		      unsigned *bytes_read)
 {
-  store_read (bootstrap_part_store, );
+  //store_read (bootstrap_part_store, );
+  return D_SUCCESS;
 }
 
 static io_return_t
 store_parted_device_set_status (void *d, dev_flavor_t flavor, dev_status_t status,
 			    mach_msg_type_number_t status_count)
 {
-    return 0;
+  return D_SUCCESS;
 }
 
 static io_return_t
 store_parted_device_get_status (void *d, dev_flavor_t flavor, dev_status_t status,
 			    mach_msg_type_number_t * count)
 {
-    return 0;
+  return D_SUCCESS;
 }
 
 static void
